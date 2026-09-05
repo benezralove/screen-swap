@@ -1,0 +1,114 @@
+ScreenSwap
+==========
+
+Swaps everything between your two monitors with one keystroke.
+
+Whatever is on the left screen goes to the right, and whatever is on the
+right comes to the left. Maximised windows stay maximised. Minimised
+windows stay minimised. Nothing else changes.
+
+    Press:  Ctrl + Alt + X
+
+
+HOW TO START IT
+---------------
+
+Double-click ScreenSwap.exe.
+
+Nothing appears to happen. That's correct. It puts a small icon in the
+system tray, down near the clock, and waits. Press Ctrl+Alt+X to use it.
+
+If the icon isn't next to the clock, click the little "^" arrow there to
+show hidden icons. You can drag it out onto the taskbar to keep it visible.
+
+
+WINDOWS WILL WARN YOU. THIS IS NORMAL.
+--------------------------------------
+
+The first time you run it, you'll probably see a blue box:
+
+    "Windows protected your PC"
+
+This is not a virus warning. It appears for every program that hasn't
+been signed with a paid certificate, which costs a few hundred dollars a
+year and isn't worth it for a small free tool. Windows shows this for all
+new, unsigned software regardless of what it does.
+
+To run it anyway:
+
+    1. Click "More info"
+    2. Click "Run anyway"
+
+You'll only need to do this once.
+
+If you'd rather not trust an .exe from someone else, that's completely
+reasonable. The full source code is included as ScreenSwap.cs, it's about
+1,500 lines of readable C#, and build.cmd rebuilds the .exe using the
+compiler already built into Windows. You can read exactly what it does
+and compile it yourself.
+
+
+THE TRAY MENU
+-------------
+
+Right-click the tray icon:
+
+  Swap screens now          Same as pressing the hotkey
+  Swap and show report      Swaps, then shows exactly what it moved
+  Tray icon                 16 icon designs to pick from
+  Icon colour               Auto, always white, or always black
+  Start with Windows        Tick this to have it launch automatically
+  Open log file             What it has been doing
+  Exit                      Quits
+
+Double-clicking the tray icon also swaps.
+
+
+THINGS WORTH KNOWING
+--------------------
+
+* It needs two monitors. With one, it tells you there's nothing to swap.
+  With three or more, it swaps the leftmost and rightmost and leaves
+  anything in between alone.
+
+* Windows that are running as administrator will not move. Windows itself
+  blocks this, and there is nothing a normal program can do about it. If
+  a window stubbornly stays put, that's why.
+
+* Your monitors don't have to be the same size or resolution. Windows are
+  scaled proportionally, so a half-width window stays half-width.
+
+* It uses about 30 MB of memory and no CPU at all when idle.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+
+Right-click the tray icon and choose "Open log file". It records every
+start, every swap, and any error.
+
+To see what it WOULD do without it touching anything, open a Command
+Prompt in this folder and run:
+
+    ScreenSwap.exe /dryrun
+
+That writes a report listing every window it can see, which screen it
+thinks each one is on, and where it would move it. It changes nothing.
+
+
+UNINSTALLING
+------------
+
+There is no installer, so there's nothing to uninstall.
+
+  1. Right-click the tray icon and choose Exit
+  2. If you ticked "Start with Windows", untick it first
+  3. Delete this folder
+
+It leaves behind two small things you can ignore or remove:
+  - a log folder at  %LOCALAPPDATA%\ScreenSwap
+  - your icon choice in the registry at  HKCU\Software\ScreenSwap
+
+
+Requires Windows 10 or 11. No installation, no dependencies, no internet
+access, no telemetry. It does not phone home and never touches the network.

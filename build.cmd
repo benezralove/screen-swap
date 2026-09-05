@@ -17,6 +17,7 @@ echo Building ScreenSwap.exe ...
   /reference:System.dll ^
   /reference:System.Drawing.dll ^
   /reference:System.Windows.Forms.dll ^
+  /reference:Microsoft.CSharp.dll ^
   ScreenSwap.cs
 
 if errorlevel 1 (

@@ -2,3 +2,8 @@
 ScreenSwap.exe
 *.pdb
 *.obj
+
+# Distribution package
+ScreenSwap.zip
+dist/*
+!dist/READ ME FIRST.txt

@@ -1004,22 +1004,103 @@ namespace ScreenSwap
                     ToolTipIcon.Warning);
         }
 
-        static bool IsStartupEnabled()
+        // Autostart runs from a Task Scheduler logon task, not the Run key.
+        // The Run key was observed writing correctly and then silently never
+        // firing at logon, so it is not trustworthy for this.
+        //
+        // This uses the Task Scheduler COM API rather than schtasks.exe: the
+        // command-line tool refuses to create an ONLOGON task without elevation
+        // ("Access is denied"), while COM happily registers one scoped to the
+        // current user with an interactive token.
+        static dynamic TaskFolder()
         {
-            RegistryKey k = Registry.CurrentUser.OpenSubKey(Config.RUN_KEY, false);
-            if (k == null) return false;
-            using (k) { return k.GetValue(Config.APP_NAME) != null; }
+            Type t = Type.GetTypeFromProgID("Schedule.Service");
+            if (t == null) return null;
+            dynamic svc = Activator.CreateInstance(t);
+            svc.Connect();
+            return svc.GetFolder("\\");
         }
 
-        static void SetStartup(bool on)
+        public static bool IsStartupEnabled()
         {
-            RegistryKey k = Registry.CurrentUser.OpenSubKey(Config.RUN_KEY, true);
-            if (k == null) return;
-            using (k)
+            try
             {
-                if (on) k.SetValue(Config.APP_NAME, "\"" + Application.ExecutablePath + "\"");
-                else if (k.GetValue(Config.APP_NAME) != null) k.DeleteValue(Config.APP_NAME);
+                dynamic folder = TaskFolder();
+                if (folder == null) return false;
+                return folder.GetTask(Config.APP_NAME) != null;   // throws when absent
             }
+            catch { return false; }
+        }
+
+        public static void SetStartup(bool on)
+        {
+            if (on)
+            {
+                try
+                {
+                    Type t = Type.GetTypeFromProgID("Schedule.Service");
+                    dynamic svc = Activator.CreateInstance(t);
+                    svc.Connect();
+                    dynamic folder = svc.GetFolder("\\");
+                    dynamic td = svc.NewTask(0);
+
+                    td.RegistrationInfo.Description = "Starts ScreenSwap at logon.";
+                    td.RegistrationInfo.Author = Environment.UserName;
+
+                    td.Settings.Enabled = true;
+                    td.Settings.StartWhenAvailable = true;
+                    td.Settings.DisallowStartIfOnBatteries = false;
+                    td.Settings.StopIfGoingOnBatteries = false;
+                    td.Settings.ExecutionTimeLimit = "PT0S";   // none; the default kills it after 3 days
+                    td.Settings.MultipleInstances = 2;         // TASK_INSTANCES_IGNORE_NEW
+
+                    dynamic trig = td.Triggers.Create(9);      // TASK_TRIGGER_LOGON
+                    trig.Delay = "PT15S";                      // let the taskbar tray exist first
+                    trig.UserId = Environment.UserDomainName + "\\" + Environment.UserName;
+
+                    // Self-heal: re-check every 5 minutes, forever. Combined with
+                    // MultipleInstances=IgnoreNew this is a no-op while the app is
+                    // alive and a relaunch if it ever dies.
+                    trig.Repetition.Interval = "PT5M";
+                    trig.Repetition.Duration = "";             // empty = indefinite
+                    trig.Repetition.StopAtDurationEnd = false;
+
+                    dynamic act = td.Actions.Create(0);        // TASK_ACTION_EXEC
+                    act.Path = Application.ExecutablePath;
+                    act.WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath);
+
+                    // TASK_CREATE_OR_UPDATE(6), TASK_LOGON_INTERACTIVE_TOKEN(3)
+                    folder.RegisterTaskDefinition(Config.APP_NAME, td, 6, null, null, 3);
+                    Log.Write("autostart enabled (logon task created)");
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("autostart FAILED: " + ex.Message);
+                    MessageBox.Show(
+                        "Could not create the startup task.\r\n\r\n" + ex.Message +
+                        "\r\n\r\nScreenSwap still works, it just will not start automatically.",
+                        "ScreenSwap", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            else
+            {
+                try
+                {
+                    dynamic folder = TaskFolder();
+                    if (folder != null) folder.DeleteTask(Config.APP_NAME, 0);
+                    Log.Write("autostart disabled (logon task deleted)");
+                }
+                catch (Exception ex) { Log.Write("autostart delete failed: " + ex.Message); }
+            }
+
+            // Remove the old Run key mechanism if a previous version left one behind.
+            try
+            {
+                RegistryKey k = Registry.CurrentUser.OpenSubKey(Config.RUN_KEY, true);
+                if (k != null)
+                    using (k) { if (k.GetValue(Config.APP_NAME) != null) k.DeleteValue(Config.APP_NAME); }
+            }
+            catch { }
         }
 
         // ---- icon plumbing ----
@@ -1178,6 +1259,13 @@ namespace ScreenSwap
                 if (s == "report") { once = true; report = true; }
                 // dryrun: list what would move, change nothing, no popup. For scripting.
                 if (s == "dryrun" || s == "list" || s == "test") { once = true; dryRun = true; }
+                if (s == "autostart-on" || s == "autostart-off" || s == "autostart-status")
+                {
+                    if (s == "autostart-on") TrayContext.SetStartup(true);
+                    else if (s == "autostart-off") TrayContext.SetStartup(false);
+                    Log.Write("autostart status: " + (TrayContext.IsStartupEnabled() ? "ENABLED" : "disabled"));
+                    return;
+                }
                 // /icons     -> build the sheet and open it
                 // /iconsheet -> build it silently (for scripting)
                 if (s == "icons" || s == "iconsheet")
@@ -1210,8 +1298,9 @@ namespace ScreenSwap
             {
                 if (!created)
                 {
-                    MessageBox.Show("ScreenSwap is already running - look for it in the system tray.",
-                        "ScreenSwap", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // Exit quietly. A modal dialog here would be poisonous if
+                    // anything ever relaunches this on a timer.
+                    Log.Write("already running - this instance is exiting");
                     return;
                 }
                 Application.EnableVisualStyles();
